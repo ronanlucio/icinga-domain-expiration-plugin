@@ -343,13 +343,14 @@ help()
 	echo
 	echo "  -d domain        : Domain to check"
 	echo "  -s whois server  : Whois server to query by"
+	echo "  -p               : Perfmod (to send data to influxdb)"
 	echo "  -h               : Show help"
 	echo "  -w days          : Domain expiration days (warning)"
 	echo "  -c days          : Domain expiration days (critical)"
 	echo
 }
 
-while getopts :hd:s:w:c: option
+while getopts :hpd:s:w:c: option
 do
 	case "${option}"
 	in
@@ -357,10 +358,14 @@ do
 		s) SERVER=$OPTARG;;
 		w) WARNING=$OPTARG;;
 		c) ALARM=$OPTARG;;
+		p) MODE="perfmod";;
 		h | *) help
 		exit 3;;
 	esac
 done
+
+SERVER="${SERVER:=auto}"
+MODE="${MODE:=default}"
 
 # check whether ALARM is greater or equal WARNING
 if [ $ALARM -ge $WARNING ]
@@ -369,7 +374,7 @@ then
 	exit 3
 fi
 
-if [ "${SERVER:=auto}" == auto ]
+if [ "${SERVER}" == auto ]
 then
 	check_domain "${DOMAIN}"
 else
@@ -377,7 +382,6 @@ else
 fi
 
 # exit codes based on the check_domain result
-
 if ! [[ "$EXP_DAYS" =~ ^-?[0-9]+$ ]]
 then
 	echo "UNKNOWN - expiration date has not been provided by WHOIS server"
@@ -385,22 +389,38 @@ then
 else
 	if [ $EXP_DAYS -gt $WARNING  ]
 	then
-		echo "OK - $EXP_DAYS days until domain expires"
+		if [ "${MODE}" == "default" ]
+		then
+			echo "OK - $EXP_DAYS days until domain expires"
+		else
+			echo "OK - 'days_to_expire' = ${EXP_DAYS} days"
+		fi
 		exit 0
 	elif [ $EXP_DAYS -le $WARNING -a $EXP_DAYS -gt $ALARM ]
 	then
-		echo "WARNING - $EXP_DAYS days until domain expires"
+		if [ "${MODE}" == "default" ]
+		then
+			echo "WARNING - $EXP_DAYS days until domain expires"
+		else
+			echo "WARNING - 'days_to_expire' = ${EXP_DAYS} days"
+		fi
 		exit 1
 	elif [ $EXP_DAYS -le $ALARM -a $EXP_DAYS -gt 0 ]
 	then
-		echo "CRITICAL - $EXP_DAYS days until domain expires"
-		exit 2
-	elif [  $EXP_DAYS -lt 0  ]
-	then
-		echo "CRITICAL - domain has expired!"
+		if [ "${MODE}" == "default" ]
+		then
+			echo "CRITICAL - $EXP_DAYS days until domain expires"
+		else
+			echo "CRITICAL - 'days_to_expire' = ${EXP_DAYS} days"
+		fi
 		exit 2
 	else
-		echo "UNKNOW - $EXP_DAYS"
+		if [ "${MODE}" == "default" ]
+		then
+			echo "UNKNOW - $EXP_DAYS"
+		else
+			echo "OK - 'days_to_expire' = ${EXP_DAYS} days"
+		fi
 		exit 3
 	fi
 fi
